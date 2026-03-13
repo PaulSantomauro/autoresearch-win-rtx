@@ -810,7 +810,7 @@ WEIGHT_DECAY = 0.0
 ADAM_BETAS = (0.8, 0.95)
 WARMUP_RATIO = 0.0
 WARMDOWN_RATIO = 0.5
-FINAL_LR_FRAC = 0.1
+FINAL_LR_FRAC = 0.2
 
 # Model size + memory defaults
 DEPTH = 8
