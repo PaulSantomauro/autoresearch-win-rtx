@@ -424,7 +424,7 @@ class MLP(nn.Module):
 
     def forward(self, x):
         x = self.c_fc(x)
-        x = F.silu(x)
+        x = F.gelu(x)
         x = self.c_proj(x)
         return x
 
@@ -621,9 +621,7 @@ class GPT(nn.Module):
                 x = block(x, ve, cos_sin, window_size)
         x = norm(x)
 
-        softcap = 15
         logits = self.lm_head(x).float()
-        logits = softcap * torch.tanh(logits / softcap)
 
         if targets is not None:
             loss = F.cross_entropy(
