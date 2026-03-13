@@ -101,9 +101,14 @@ LOOP FOREVER:
 6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
 7. Record the results in the tsv
 8. If val_bpb improved (lower), you "advance" the branch, keeping the git commit
-9. If val_bpb is equal or worse, you git reset back to where you started
+9. If val_bpb is equal or worse, revert ONLY `train.py` with: `git checkout HEAD -- train.py`
 
-**CRITICAL — never reset prepare.py**: This repo uses a custom franchise dataset patch in `prepare.py`. When reverting a failed experiment, ONLY reset `train.py`, never `prepare.py`. Use `git checkout HEAD -- train.py` instead of `git reset --hard` to avoid wiping the franchise dataset support. If you must use `git reset --hard`, immediately run `git checkout HEAD -- prepare.py` afterward to restore it.
+**CRITICAL — revert train.py only, never git reset --hard**:
+- **ALWAYS use**: `git checkout HEAD -- train.py` to revert a failed experiment
+- **NEVER use**: `git reset --hard` — this wipes `prepare.py` and breaks the franchise dataset
+- The minimum safe commit floor is `a66f2d5` — never reset past this commit under any circumstances
+- If you accidentally run `git reset --hard`, immediately restore with: `git checkout a66f2d5 -- prepare.py franchise_prepare.py`
+- You can verify the franchise patch is intact by checking: `grep -c "franchise" prepare.py` — should return a number > 0
 
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind but you should probably do this very very sparingly (if ever).
 
