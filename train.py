@@ -621,7 +621,9 @@ class GPT(nn.Module):
                 x = block(x, ve, cos_sin, window_size)
         x = norm(x)
 
+        softcap = 15
         logits = self.lm_head(x).float()
+        logits = softcap * torch.tanh(logits / softcap)
 
         if targets is not None:
             loss = F.cross_entropy(
@@ -806,7 +808,7 @@ MATRIX_LR = 0.04
 SCALAR_LR = 0.5
 WEIGHT_DECAY = 0.0
 ADAM_BETAS = (0.8, 0.95)
-WARMUP_RATIO = 0.0
+WARMUP_RATIO = 0.05
 WARMDOWN_RATIO = 0.5
 FINAL_LR_FRAC = 0.0
 
