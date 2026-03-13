@@ -495,7 +495,7 @@ class GPT(nn.Module):
         for ve in self.value_embeds.values():
             ve.to(dtype=embed_dtype)
 
-    def _precompute_rotary_embeddings(self, seq_len, head_dim, base=50000, device=None, dtype=torch.bfloat16):
+    def _precompute_rotary_embeddings(self, seq_len, head_dim, base=500000, device=None, dtype=torch.bfloat16):
         if device is None:
             device = self.transformer.wte.weight.device
         channel_range = torch.arange(0, head_dim, 2, dtype=torch.float32, device=device)
