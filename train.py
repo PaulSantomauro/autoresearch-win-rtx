@@ -416,19 +416,17 @@ class CausalSelfAttention(nn.Module):
         return y
 
 
-MLP_HIDDEN = lambda n: round(n * 8 / 3 / 64) * 64  # iso-param hidden for GeGLU
-
-
 class MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        hidden = MLP_HIDDEN(config.n_embd)
-        self.c_fc = nn.Linear(config.n_embd, hidden, bias=False)
-        self.c_gate = nn.Linear(config.n_embd, hidden, bias=False)
-        self.c_proj = nn.Linear(hidden, config.n_embd, bias=False)
+        self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd, bias=False)
+        self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd, bias=False)
 
     def forward(self, x):
-        return self.c_proj(F.gelu(self.c_fc(x)) * self.c_gate(x))
+        x = self.c_fc(x)
+        x = F.gelu(x)
+        x = self.c_proj(x)
+        return x
 
 
 class Block(nn.Module):
@@ -806,7 +804,7 @@ WINDOW_PATTERN = "SSSL"   # sliding window pattern: L=full, S=half context
 TOTAL_BATCH_SIZE = 2 ** 15
 EMBEDDING_LR = 0.6
 UNEMBEDDING_LR = 0.004
-MATRIX_LR = 0.04
+MATRIX_LR = 0.05
 SCALAR_LR = 0.5
 WEIGHT_DECAY = 0.0
 ADAM_BETAS = (0.8, 0.95)
