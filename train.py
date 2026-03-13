@@ -495,7 +495,7 @@ class GPT(nn.Module):
         for ve in self.value_embeds.values():
             ve.to(dtype=embed_dtype)
 
-    def _precompute_rotary_embeddings(self, seq_len, head_dim, base=10000, device=None, dtype=torch.bfloat16):
+    def _precompute_rotary_embeddings(self, seq_len, head_dim, base=50000, device=None, dtype=torch.bfloat16):
         if device is None:
             device = self.transformer.wte.weight.device
         channel_range = torch.arange(0, head_dim, 2, dtype=torch.float32, device=device)
@@ -809,7 +809,7 @@ SCALAR_LR = 0.5
 WEIGHT_DECAY = 0.0
 ADAM_BETAS = (0.8, 0.95)
 WARMUP_RATIO = 0.0
-WARMDOWN_RATIO = 0.35
+WARMDOWN_RATIO = 0.5
 FINAL_LR_FRAC = 0.1
 
 # Model size + memory defaults
