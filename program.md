@@ -96,12 +96,14 @@ LOOP FOREVER:
 1. Look at the git state: the current branch/commit we're on
 2. Tune `train.py` with an experimental idea by directly hacking the code.
 3. git commit
-4. Run the experiment: `uv run train.py > run.log 2>&1` (redirect everything — do NOT use tee or let output flood your context)
+4. Run the experiment: `PYTORCH_ALLOC_CONF='' /c/Users/pauls/.local/bin/uv.exe run train.py --dataset franchise > run.log 2>&1` (redirect everything — do NOT use tee or let output flood your context)
 5. Read out the results: `grep "^val_bpb:\|^peak_vram_mb:" run.log`
 6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
 7. Record the results in the tsv
 8. If val_bpb improved (lower), you "advance" the branch, keeping the git commit
 9. If val_bpb is equal or worse, you git reset back to where you started
+
+**CRITICAL — never reset prepare.py**: This repo uses a custom franchise dataset patch in `prepare.py`. When reverting a failed experiment, ONLY reset `train.py`, never `prepare.py`. Use `git checkout HEAD -- train.py` instead of `git reset --hard` to avoid wiping the franchise dataset support. If you must use `git reset --hard`, immediately run `git checkout HEAD -- prepare.py` afterward to restore it.
 
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind but you should probably do this very very sparingly (if ever).
 
