@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)",
+      "Bash(PYTORCH_ALLOC_CONF='' /c/Users/pauls/.local/bin/uv.exe run train.py --dataset franchise > run.log 2>&1)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)"
+    ]
+  }
+}
