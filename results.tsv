@@ -1,1 +1,3 @@
 commit	val_bpb	memory_gb	status	description
+272b9e7	0.636847	22.6	keep	baseline
+320e5c2	0.701611	20.1	discard	SwiGLU iso-param MLP (worse than relu^2)
