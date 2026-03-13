@@ -11,10 +11,12 @@ AUTORESEARCH_DATASET or by running this script with --dataset.
 """
 
 import argparse
+import array as _array
 import math
 import os
 import pickle
 import shutil
+import struct
 import time
 
 import pyarrow.parquet as pq
@@ -43,7 +45,7 @@ BOS_TOKEN = "<|reserved_0|>"
 # ---------------------------------------------------------------------------
 
 DEFAULT_DATASET = "tinystories"
-DATASET_CHOICES = ("tinystories",)
+DATASET_CHOICES = ("tinystories", "franchise")
 
 
 def _default_cache_dir():
@@ -363,7 +365,12 @@ class Tokenizer:
     @classmethod
     def from_directory(cls, tokenizer_dir=None, dataset=None):
         dataset_name = _resolve_dataset_name(dataset)
-        resolved_dir = tokenizer_dir if tokenizer_dir is not None else _tokenizer_dir(dataset_name)
+        if tokenizer_dir is not None:
+            resolved_dir = tokenizer_dir
+        elif dataset_name == "franchise":
+            resolved_dir = _franchise_tokenizer_dir()
+        else:
+            resolved_dir = _tokenizer_dir(dataset_name)
         with open(os.path.join(resolved_dir, "tokenizer.pkl"), "rb") as f:
             enc = pickle.load(f)
         return cls(enc, dataset=dataset_name)
@@ -396,26 +403,103 @@ class Tokenizer:
 
 def get_token_bytes(device="cpu", dataset=None):
     dataset_name = _resolve_dataset_name(dataset)
-    path = os.path.join(_tokenizer_dir(dataset_name), "token_bytes.pt")
+    if dataset_name == "franchise":
+        path = os.path.join(_franchise_tokenizer_dir(), "token_bytes.pt")
+    else:
+        path = os.path.join(_tokenizer_dir(dataset_name), "token_bytes.pt")
     with open(path, "rb") as f:
         return torch.load(f, map_location=device)
+
+
+def _franchise_data_dir():
+    """Return the data dir for the franchise dataset (uses shared autoresearch cache)."""
+    legacy = os.path.join(os.path.expanduser("~"), ".cache", "autoresearch", "data")
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        win_path = os.path.join(local_app_data, "autoresearch", "data")
+        if os.path.isdir(win_path):
+            return win_path
+    return legacy
+
+
+def _franchise_tokenizer_dir():
+    """Return the tokenizer dir for the franchise dataset."""
+    legacy = os.path.join(os.path.expanduser("~"), ".cache", "autoresearch", "tokenizer")
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        win_path = os.path.join(local_app_data, "autoresearch", "tokenizer")
+        if os.path.isdir(win_path):
+            return win_path
+    return legacy
+
+
+def _list_franchise_bin_files():
+    """Return sorted list of shard_NNNNN.bin train shards."""
+    import re as _re
+    data_dir = _franchise_data_dir()
+    if not os.path.isdir(data_dir):
+        return []
+    files = sorted(f for f in os.listdir(data_dir) if _re.match(r"shard_\d{5}\.bin", f))
+    return [os.path.join(data_dir, f) for f in files]
+
+
+def _read_bin_shard(path, chunk_size=4096):
+    """
+    Read a franchise binary shard written by franchise_prepare.py.
+    Format: 8-byte little-endian uint64 token count, then int32 token IDs.
+    Yields lists of token IDs in chunks.
+    """
+    with open(path, "rb") as f:
+        header = f.read(8)
+        n_tokens = struct.unpack("<Q", header)[0]
+        buf = _array.array("i")
+        buf.fromfile(f, n_tokens)
+    tokens = buf.tolist()
+    for i in range(0, len(tokens), chunk_size):
+        yield tokens[i:i + chunk_size]
+
+
+def _franchise_bins_exist():
+    """Return True if franchise binary shards are available."""
+    return len(_list_franchise_bin_files()) > 0
 
 
 def _document_batches(split, dataset=None, tokenizer_batch_size=128):
     dataset_name = _resolve_dataset_name(dataset)
     assert split in ("train", "val", "test")
 
-    epoch = 1
-    while True:
-        batch = []
-        for text in _iter_tinystories_texts(split, dataset_name=dataset_name):
-            batch.append(text)
-            if len(batch) >= tokenizer_batch_size:
+    # --- Franchise binary shard path ---
+    if dataset_name == "franchise":
+        data_dir = _franchise_data_dir()
+        val_bin = os.path.join(data_dir, "shard_val.bin")
+        if split == "val":
+            assert os.path.exists(val_bin), \
+                f"Franchise val shard not found: {val_bin}. Run franchise_prepare.py first."
+            shard_paths = [val_bin]
+        else:
+            shard_paths = _list_franchise_bin_files()
+            assert len(shard_paths) > 0, \
+                "No franchise train shards found. Run franchise_prepare.py first."
+        epoch = 1
+        while True:
+            for filepath in shard_paths:
+                for chunk in _read_bin_shard(filepath, chunk_size=tokenizer_batch_size):
+                    yield [chunk], epoch
+            epoch += 1
+
+    # --- TinyStories parquet path ---
+    else:
+        epoch = 1
+        while True:
+            batch = []
+            for text in _iter_tinystories_texts(split, dataset_name=dataset_name):
+                batch.append(text)
+                if len(batch) >= tokenizer_batch_size:
+                    yield batch, epoch
+                    batch = []
+            if batch:
                 yield batch, epoch
-                batch = []
-        if batch:
-            yield batch, epoch
-        epoch += 1
+            epoch += 1
 
 
 def make_dataloader(tokenizer, B, T, split, device="cuda", dataset=None, buffer_size=1000):
@@ -424,8 +508,12 @@ def make_dataloader(tokenizer, B, T, split, device="cuda", dataset=None, buffer_
     Every row starts with BOS. Documents packed using best-fit to minimize cropping.
     When no document fits remaining space, crops shortest doc to fill exactly.
     100% utilization (no padding).
+
+    For the franchise dataset, batches are pre-tokenized int lists (BOS already
+    prepended by franchise_prepare.py) and are added directly to the buffer.
     """
     dataset_name = _resolve_dataset_name(dataset or getattr(tokenizer, "dataset", None))
+    using_franchise = (dataset_name == "franchise")
     if split == "test":
         assert dataset_name == "tinystories", "Test split exists only for TinyStories."
     assert split in ("train", "val", "test")
@@ -441,8 +529,12 @@ def make_dataloader(tokenizer, B, T, split, device="cuda", dataset=None, buffer_
     def refill_buffer():
         nonlocal epoch
         doc_batch, epoch = next(batches)
-        token_lists = tokenizer.encode(doc_batch, prepend=bos_token)
-        doc_buffer.extend(token_lists)
+        if using_franchise:
+            # doc_batch is list[list[int]] — already tokenized with BOS
+            doc_buffer.extend(doc_batch)
+        else:
+            token_lists = tokenizer.encode(doc_batch, prepend=bos_token)
+            doc_buffer.extend(token_lists)
 
     row_buffer = torch.empty((B, row_capacity), dtype=torch.long)
     cpu_buffer = torch.empty(2 * B * T, dtype=torch.long, pin_memory=use_cuda)
