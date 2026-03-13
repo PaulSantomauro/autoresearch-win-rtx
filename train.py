@@ -802,7 +802,7 @@ WINDOW_PATTERN = "SSSL"   # sliding window pattern: L=full, S=half context
 
 # Optimization
 TOTAL_BATCH_SIZE = 2 ** 15
-EMBEDDING_LR = 0.6
+EMBEDDING_LR = 1.0
 UNEMBEDDING_LR = 0.004
 MATRIX_LR = 0.04
 SCALAR_LR = 0.5
@@ -813,7 +813,7 @@ WARMDOWN_RATIO = 0.5
 FINAL_LR_FRAC = 0.0
 
 # Model size + memory defaults
-DEPTH = 10
+DEPTH = 8
 DEVICE_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 8
 
